@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Carrom 3D</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+    body {
+      background-color: #0b111e;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 100vh;
+      padding: 10px;
+      overflow: hidden;
+    }
+    .header {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: #141d2f;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .title-group { display: flex; align-items: center; gap: 8px; }
+    .title-icon { width: 22px; height: 22px; background: #f59e0b; border-radius: 50%; border: 3px solid #b45309; }
+    .title-text { font-size: 18px; font-weight: 800; color: #fbbf24; }
+    .btn-reset {
+      background: #d97706; color: white; border: none; padding: 6px 14px;
+      border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 13px;
+    }
+    .btn-reset:active { transform: scale(0.96); }
+    
+    .scoreboard {
+      width: 100%; max-width: 480px; display: flex; gap: 10px; margin-top: 8px;
+    }
+    .card {
+      flex: 1; background: #141d2f; border: 2px solid #283754; border-radius: 10px;
+      padding: 8px; text-align: center; position: relative;
+    }
+    .card.active { border-color: #f59e0b; box-shadow: 0 0 10px rgba(245, 158, 11, 0.3); }
+    .turn-badge {
+      position: absolute; top: -10px; right: 10px; background: #f59e0b; color: #000;
+      font-size: 9px; font-weight: 900; padding: 2px 6px; border-radius: 4px;
+    }
+    .p-label { font-size: 11px; color: #94a3b8; font-weight: 700; text-transform: uppercase; }
+    .p-score { font-size: 22px; font-weight: 900; margin-top: 2px; }
+
+    .status-text {
+      font-size: 12px; color: #fbbf24; margin: 6px 0; font-weight: 600; text-align: center;
+    }
+
+    .canvas-container {
+      width: 100%; max-width: 440px; aspect-ratio: 1; position: relative;
+      background: #000; border-radius: 16px; overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+      touch-action: none;
+    }
+    canvas { width: 100%; height: 100%; display: block; }
+
+    .controls {
+      width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 8px; margin-top: 8px;
+    }
+    .slider-box {
+      background: #141d2f; padding: 8px 12px; border-radius: 10px; display: flex;
+      align-items: center; justify-content: space-between; gap: 10px;
+    }
+    .slider-box label { font-size: 12px; font-weight: 700; color: #94a3b8; }
+    .slider-box input { flex: 1; accent-color: #f59e0b; }
+    .slider-val { font-size: 12px; font-weight: 800; color: #fbbf24; min-width: 35px; text-align: right; }
+
+    .actions { display: flex; gap: 8px; }
+    .btn-mode {
+      flex: 1; padding: 10px; background: #1f293d; color: white; border: 1px solid #334155;
+      border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer; text-align: center;
+    }
+    .btn-mode.active { background: #d97706; border-color: #f59e0b; }
+    .btn-strike {
+      flex: 2; padding: 10px; background: #10b981; color: white; border: none;
+      border-radius: 8px; font-weight: 800; font-size: 14px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .btn-strike:disabled { background: #374151; color: #6b7280; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="title-group">
+      <div class="title-icon"></div>
+      <div class="title-text">Carrom 3D</div>
+    </div>
+    <button class="btn-reset" onclick="resetGame()">Reset</button>
+  </div>
+
+  <div class="scoreboard">
+    <div class="card active" id="p1-card">
+      <div class="turn-badge" id="p1-badge">TURN</div>
+      <div class="p-label" id="p1-name">Player 1 (White)</div>
+      <div class="p-score" id="p1-score">0</div>
+    </div>
+    <div class="card" id="p2-card">
+      <div class="turn-badge" id="p2-badge" style="display:none;">TURN</div>
+      <div class="p-label" id="p2-name">Player 2 (Black)</div>
+      <div class="p-score" id="p2-score">0</div>
+    </div>
+  </div>
+
+  <div class="status-text" id="status">Player 1's turn - Adjust baseline position & pull/aim to strike!</div>
+
+  <div class="canvas-container">
+    <canvas id="board"></canvas>
+  </div>
+
+  <div class="controls">
+    <div class="slider-box">
+      <label>Baseline Position</label>
+      <input type="range" id="posSlider" min="0" max="100" value="50">
+      <div class="slider-val" id="posVal">50%</div>
+    </div>
+    <div class="actions">
+      <button class="btn-mode active" id="btn2P" onclick="setMode('2P')">2P Mode</button>
+      <button class="btn-mode" id="btnAI" onclick="setMode('AI')">vs AI</button>
+      <button class="btn-strike" id="strikeBtn" onclick="executeStrike()">STRIKE</button>
+    </div>
+  </div>
+
+<script>
+const canvas = document.getElementById('board');
+const ctx = canvas.getContext('2d');
+const posSlider = document.getElementById('posSlider');
+
+let width = 600;
+let height = 600;
+canvas.width = width;
+canvas.height = height;
+
+// Game Config
+const BOARD_SIZE = 540;
+const MARGIN = 30;
+const INNER_MIN = MARGIN + 25;
+const INNER_MAX = width - MARGIN - 25;
+
+// Exact Sizes: Coin = 20px, Striker = 28px
+const COIN_R = 20.0; 
+const STRIKER_R = 28.0;
+const POCKET_R = 30;
+
+let mode = '2P';
+let currentPlayer = 1;
+let p1Score = 0;
+let p2Score = 0;
+let gameState = 'AIMING';
+
+let aimAngle = -Math.PI / 2;
+let aimPower = 15;
+let isDraggingAim = false;
+
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx;
+
+function playHitSound(volume = 0.5) {
+  try {
+    if (!audioCtx) audioCtx = new AudioCtx();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.05);
+    gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.05);
+  } catch(e) {}
+}
+
+class Disc {
+  constructor(x, y, r, type, color) {
+    this.x = x;
+    this.y = y;
+    this.vx = 0;
+    this.vy = 0;
+    this.r = r;
+    this.type = type;
+    this.color = color;
+    this.active = true;
+  }
+
+  update() {
+    if (!this.active) return;
+    this.x += this.vx;
+    this.y += this.vy;
+    this.vx *= 0.98;
+    this.vy *= 0.98;
+
+    if (Math.hypot(this.vx, this.vy) < 0.08) {
+      this.vx = 0;
+      this.vy = 0;
+    }
+
+    if (this.x - this.r < INNER_MIN) { this.x = INNER_MIN + this.r; this.vx *= -0.85; playHitSound(0.3); }
+    if (this.x + this.r > INNER_MAX) { this.x = INNER_MAX - this.r; this.vx *= -0.85; playHitSound(0.3); }
+    if (this.y - this.r < INNER_MIN) { this.y = INNER_MIN + this.r; this.vy *= -0.85; playHitSound(0.3); }
+    if (this.y + this.r > INNER_MAX) { this.y = INNER_MAX - this.r; this.vy *= -0.85; playHitSound(0.3); }
+  }
+
+  draw() {
+    if (!this.active) return;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    ctx.beginPath();
+    ctx.arc(3, 4, this.r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, this.r, 0, Math.PI * 2);
+    
+    if (this.type === 'striker') {
+      let grad = ctx.createRadialGradient(-this.r*0.3, -this.r*0.3, 2, 0, 0, this.r);
+      grad.addColorStop(0, '#ffffff');
+      grad.addColorStop(0.7, '#cbd5e1');
+      grad.addColorStop(1, '#64748b');
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = '#334155';
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(0, 0, this.r * 0.65, 0, Math.PI * 2);
+      ctx.strokeStyle = '#475569';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(0, 0, this.r * 0.3, 0, Math.PI * 2);
+      ctx.fillStyle = '#1e293b';
+      ctx.fill();
+    } else if (this.type === 'white') {
+      let grad = ctx.createRadialGradient(-this.r*0.3, -this.r*0.3, 1, 0, 0, this.r);
+      grad.addColorStop(0, '#fefefe');
+      grad.addColorStop(1, '#d1d5db');
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#9ca3af';
+      ctx.stroke();
+      
+      ctx.beginPath();
+      ctx.arc(0, 0, this.r * 0.5, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (this.type === 'black') {
+      let grad = ctx.createRadialGradient(-this.r*0.3, -this.r*0.3, 1, 0, 0, this.r);
+      grad.addColorStop(0, '#4b5563');
+      grad.addColorStop(1, '#111827');
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#000000';
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(0, 0, this.r * 0.5, 0, Math.PI * 2);
+      ctx.strokeStyle = '#374151';
+      ctx.stroke();
+    } else if (this.type === 'queen') {
+      let grad = ctx.createRadialGradient(-this.r*0.3, -this.r*0.3, 1, 0, 0, this.r);
+      grad.addColorStop(0, '#f87171');
+      grad.addColorStop(1, '#dc2626');
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#991b1b';
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(0, 0, this.r * 0.5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+}
+
+let striker;
+let discs = [];
+const pockets = [
+  { x: INNER_MIN + 12, y: INNER_MIN + 12 },
+  { x: INNER_MAX - 12, y: INNER_MIN + 12 },
+  { x: INNER_MIN + 12, y: INNER_MAX - 12 },
+  { x: INNER_MAX - 12, y: INNER_MAX - 12 }
+];
+
+function initBoard() {
+  discs = [];
+  const cx = width / 2;
+  const cy = height / 2;
+
+  discs.push(new Disc(cx, cy, COIN_R, 'queen'));
+
+  const layer1Types = ['white', 'black', 'white', 'black', 'white', 'black'];
+  const dist1 = COIN_R * 2.05;
+  for (let i = 0; i < 6; i++) {
+    let ang = i * (Math.PI / 3);
+    discs.push(new Disc(cx + Math.cos(ang)*dist1, cy + Math.sin(ang)*dist1, COIN_R, layer1Types[i]));
+  }
+
+  const layer2Types = ['black', 'white', 'black', 'white', 'black', 'white', 'black', 'white', 'black', 'white', 'black', 'white'];
+  const dist2 = COIN_R * 4.05;
+  for (let i = 0; i < 12; i++) {
+    let ang = i * (Math.PI / 6);
+    discs.push(new Disc(cx + Math.cos(ang)*dist2, cy + Math.sin(ang)*dist2, COIN_R, layer2Types[i]));
+  }
+
+  const baselineY = height - MARGIN - 65;
+  striker = new Disc(cx, baselineY, STRIKER_R, 'striker');
+  updateStrikerPos();
+}
+
+function updateStrikerPos() {
+  if (gameState !== 'AIMING') return;
+  const val = posSlider.value / 100;
+  const minX = INNER_MIN + 65;
+  const maxX = INNER_MAX - 65;
+  
+  if (currentPlayer === 1) {
+    striker.x = minX + val * (maxX - minX);
+    striker.y = height - MARGIN - 65;
+  } else {
+    striker.x = minX + val * (maxX - minX);
+    striker.y = MARGIN + 65;
+  }
+}
+
+posSlider.addEventListener('input', (e) => {
+  document.getElementById('posVal').innerText = e.target.value + '%';
+  updateStrikerPos();
+});
+
+function drawBoardSurface() {
+  ctx.fillStyle = '#2d1808';
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.fillStyle = '#4a2810';
+  ctx.fillRect(MARGIN, MARGIN, width - MARGIN*2, height - MARGIN*2);
+
+  ctx.fillStyle = '#f5e4bc';
+  ctx.fillRect(INNER_MIN, INNER_MIN, INNER_MAX - INNER_MIN, INNER_MAX - INNER_MIN);
+
+  ctx.strokeStyle = 'rgba(217, 187, 139, 0.4)';
+  ctx.lineWidth = 1.5;
+  for (let y = INNER_MIN + 20; y < INNER_MAX; y += 18) {
+    ctx.beginPath();
+    ctx.moveTo(INNER_MIN, y);
+    ctx.bezierCurveTo(width*0.3, y + 6, width*0.7, y - 6, INNER_MAX, y);
+    ctx.stroke();
+  }
+
+  pockets.forEach(p => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, POCKET_R, 0, Math.PI * 2);
+    ctx.fillStyle = '#111111';
+    ctx.fill();
+    ctx.strokeStyle = '#52341b';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+  });
+
+  const cx = width / 2;
+  const cy = height / 2;
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, 48, 0, Math.PI * 2);
+  ctx.strokeStyle = '#111';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+  ctx.fillStyle = '#dc2626';
+  ctx.fill();
+
+  const sides = [
+    { x1: INNER_MIN + 50, y1: INNER_MIN + 65, x2: INNER_MAX - 50, y2: INNER_MIN + 65, textY: INNER_MIN + 50 },
+    { x1: INNER_MIN + 50, y1: INNER_MAX - 65, x2: INNER_MAX - 50, y2: INNER_MAX - 65, textY: INNER_MAX - 50 },
+  ];
+
+  sides.forEach(s => {
+    ctx.beginPath();
+    ctx.moveTo(s.x1, s.y1);
+    ctx.lineTo(s.x2, s.y2);
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    [s.x1, s.x2].forEach(bx => {
+      ctx.beginPath();
+      ctx.arc(bx, s.y1, 14, 0, Math.PI * 2);
+      ctx.fillStyle = '#dc2626';
+      ctx.fill();
+      ctx.strokeStyle = '#111';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    });
+
+    ctx.save();
+    ctx.font = 'bold 13px sans-serif';
+    ctx.fillStyle = '#222';
+    ctx.textAlign = 'center';
+    ctx.fillText('FAZ', cx, s.textY);
+    ctx.restore();
+  });
+
+  const verticalSides = [
+    { x: INNER_MIN + 65, y1: INNER_MIN + 50, y2: INNER_MAX - 50, textX: INNER_MIN + 50 },
+    { x: INNER_MAX - 65, y1: INNER_MIN + 50, y2: INNER_MAX - 50, textX: INNER_MAX - 50 }
+  ];
+
+  verticalSides.forEach(s => {
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y1);
+    ctx.lineTo(s.x, s.y2);
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    [s.y1, s.y2].forEach(by => {
+      ctx.beginPath();
+      ctx.arc(s.x, by, 14, 0, Math.PI * 2);
+      ctx.fillStyle = '#dc2626';
+      ctx.fill();
+      ctx.strokeStyle = '#111';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    });
+
+    ctx.save();
+    ctx.font = 'bold 13px sans-serif';
+    ctx.fillStyle = '#222';
+    ctx.textAlign = 'center';
+    ctx.translate(s.textX, cy);
+    ctx.rotate(s.textX < cx ? -Math.PI/2 : Math.PI/2);
+    ctx.fillText('FAZ', 0, 0);
+    ctx.restore();
+  });
+
+  const cornerAngles = [
+    { x: INNER_MIN + 65, y: INNER_MIN + 65, ang: Math.PI * 1.25 },
+    { x: INNER_MAX - 65, y: INNER_MIN + 65, ang: Math.PI * 1.75 },
+    { x: INNER_MIN + 65, y: INNER_MAX - 65, ang: Math.PI * 0.75 },
+    { x: INNER_MAX - 65, y: INNER_MAX - 65, ang: Math.PI * 0.25 }
+  ];
+
+  cornerAngles.forEach(c => {
+    ctx.save();
+    ctx.translate(c.x, c.y);
+    ctx.rotate(c.ang);
+    ctx.beginPath();
+    ctx.arc(0, 0, 18, Math.PI*0.2, Math.PI*1.8);
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-30, 0);
+    ctx.stroke();
+    ctx.restore();
+  });
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (gameState !== 'AIMING') return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (width / rect.width);
+  const my = (e.clientY - rect.top) * (height / rect.height);
+  isDraggingAim = true;
+  updateAim(mx, my);
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  if (!isDraggingAim || gameState !== 'AIMING') return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (width / rect.width);
+  const my = (e.clientY - rect.top) * (height / rect.height);
+  updateAim(mx, my);
+});
+
+window.addEventListener('pointerup', () => { isDraggingAim = false; });
+
+function updateAim(mx, my) {
+  let dx = mx - striker.x;
+  let dy = my - striker.y;
+  aimAngle = Math.atan2(dy, dx);
+  aimPower = Math.min(Math.hypot(dx, dy) / 8, 22);
+}
+
+function executeStrike() {
+  if (gameState !== 'AIMING') return;
+  gameState = 'MOVING';
+  let p = Math.max(aimPower, 8);
+  striker.vx = Math.cos(aimAngle) * p;
+  striker.vy = Math.sin(aimAngle) * p;
+  playHitSound(0.8);
+  document.getElementById('strikeBtn').disabled = true;
+}
+
+function resolveCollisions() {
+  let allDiscs = [striker, ...discs.filter(d => d.active)];
+  for (let i = 0; i < allDiscs.length; i++) {
+    for (let j = i + 1; j < allDiscs.length; j++) {
+      let d1 = allDiscs[i];
+      let d2 = allDiscs[j];
+      let dx = d2.x - d1.x;
+      let dy = d2.y - d1.y;
+      let dist = Math.hypot(dx, dy);
+      let minDist = d1.r + d2.r;
+
+      if (dist < minDist) {
+        let nx = dx / dist;
+        let ny = dy / dist;
+        let overlap = minDist - dist;
+
+        d1.x -= nx * overlap * 0.5;
+        d1.y -= ny * overlap * 0.5;
+        d2.x += nx * overlap * 0.5;
+        d2.y += ny * overlap * 0.5;
+
+        let kx = d1.vx - d2.vx;
+        let ky = d1.vy - d2.vy;
+        let p = 2 * (nx * kx + ny * ky) / 2;
+
+        d1.vx -= p * nx;
+        d1.vy -= p * ny;
+        d2.vx += p * nx;
+        d2.vy += p * ny;
+
+        playHitSound(Math.min(Math.hypot(d1.vx, d1.vy) / 15, 1));
+      }
+    }
+  }
+}
+
+function checkPockets() {
+  let allDiscs = [striker, ...discs.filter(d => d.active)];
+  allDiscs.forEach(d => {
+    pockets.forEach(p => {
+      if (Math.hypot(d.x - p.x, d.y - p.y) < POCKET_R - 5) {
+        d.active = false;
+        d.vx = 0;
+        d.vy = 0;
+
+        if (d.type === 'white') {
+          if (currentPlayer === 1) p1Score += 10; else p2Score += 10;
+        } else if (d.type === 'black') {
+          if (currentPlayer === 2) p2Score += 10; else p1Score += 10;
+        } else if (d.type === 'queen') {
+          if (currentPlayer === 1) p1Score += 50; else p2Score += 50;
+        }
+        updateScoreboard();
+      }
+    });
+  });
+}
+
+function updateScoreboard() {
+  document.getElementById('p1-score').innerText = p1Score;
+  document.getElementById('p2-score').innerText = p2Score;
+}
+
+function checkTurnEnd() {
+  if (gameState !== 'MOVING') return;
+  let allDiscs = [striker, ...discs.filter(d => d.active)];
+  let isMoving = allDiscs.some(d => Math.hypot(d.vx, d.vy) > 0.05);
+
+  if (!isMoving) {
+    gameState = 'AIMING';
+    document.getElementById('strikeBtn').disabled = false;
+
+    striker.active = true;
+    striker.vx = 0;
+    striker.vy = 0;
+
+    currentPlayer = currentPlayer === 1 ? 2 : 1;
+    document.getElementById('p1-card').classList.toggle('active', currentPlayer === 1);
+    document.getElementById('p2-card').classList.toggle('active', currentPlayer === 2);
+    document.getElementById('p1-badge').style.display = currentPlayer === 1 ? 'block' : 'none';
+    document.getElementById('p2-badge').style.display = currentPlayer === 2 ? 'block' : 'none';
+
+    document.getElementById('status').innerText = `Player ${currentPlayer}'s turn - Position & Shoot!`;
+    updateStrikerPos();
+
+    if (mode === 'AI' && currentPlayer === 2) {
+      setTimeout(playAITurn, 800);
+    }
+  }
+}
+
+function playAITurn() {
+  posSlider.value = Math.floor(Math.random() * 80) + 10;
+  updateStrikerPos();
+
+  let target = discs.find(d => d.active && d.type !== 'white');
+  if (!target) target = discs.find(d => d.active);
+
+  if (target) {
+    let dx = target.x - striker.x;
+    let dy = target.y - striker.y;
+    aimAngle = Math.atan2(dy, dx);
+    aimPower = 16 + Math.random() * 4;
+    setTimeout(executeStrike, 600);
+  }
+}
+
+function gameLoop() {
+  ctx.clearRect(0, 0, width, height);
+
+  drawBoardSurface();
+
+  discs.forEach(d => {
+    d.update();
+    d.draw();
+  });
+
+  striker.update();
+  striker.draw();
+
+  if (gameState === 'MOVING') {
+    resolveCollisions();
+    checkPockets();
+    checkTurnEnd();
+  }
+
+  if (gameState === 'AIMING') {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(striker.x, striker.y);
+    let lineLen = aimPower * 8;
+    ctx.lineTo(striker.x + Math.cos(aimAngle) * lineLen, striker.y + Math.sin(aimAngle) * lineLen);
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([6, 6]);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(striker.x + Math.cos(aimAngle) * lineLen, striker.y + Math.sin(aimAngle) * lineLen, 6, 0, Math.PI * 2);
+    ctx.fillStyle = '#f59e0b';
+    ctx.fill();
+    ctx.restore();
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('btn2P').classList.toggle('active', m === '2P');
+  document.getElementById('btnAI').classList.toggle('active', m === 'AI');
+  resetGame();
+}
+
+function resetGame() {
+  p1Score = 0;
+  p2Score = 0;
+  currentPlayer = 1;
+  gameState = 'AIMING';
+  updateScoreboard();
+  document.getElementById('p1-card').classList.add('active');
+  document.getElementById('p2-card').classList.remove('active');
+  document.getElementById('p1-badge').style.display = 'block';
+  document.getElementById('p2-badge').style.display = 'none';
+  document.getElementById('strikeBtn').disabled = false;
+  initBoard();
+}
+
+initBoard();
+gameLoop();
+</script>
+</body>
+</html>
